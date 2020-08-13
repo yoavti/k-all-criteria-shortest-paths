@@ -1,3 +1,4 @@
+import org.jgrapht.Graph;
 import org.jgrapht.GraphPath;
 import org.jgrapht.alg.flow.DinicMFImpl;
 import org.jgrapht.alg.shortestpath.DijkstraShortestPath;
@@ -15,7 +16,126 @@ import java.util.stream.Collectors;
 public class kAllCriteriaShortestPaths<V, E> {
 
     public static void main(String[] args) {
-        //maybe add testing here
+        int n = 5;
+
+        DefaultDirectedGraph<Integer, DefaultEdge> G = generateRandomConnectedDirectedGraph(n, 10, 1, n);
+        System.out.println("Input Graph: " + G);
+
+        System.out.println("Weight Functions:");
+        List<Function<DefaultEdge, Double>> weightFunctions = generateRandomWeightFunctions(G, 3, 2, true);
+        printWeightFunctions(weightFunctions, G);
+
+        System.out.println("Result: " + new kAllCriteriaShortestPaths<Integer, DefaultEdge>().kAllCriteriaShortestPathsAlg(G, weightFunctions, 1, n, 2));
+    }
+
+    /**
+     * Prints the received weight functions in a pretty manner
+     * @param weightFunctions The weight functions to print
+     * @param G The graph the weight functions exist in
+     */
+    private static void printWeightFunctions(List<Function<DefaultEdge, Double>> weightFunctions, Graph<Integer, DefaultEdge> G) {
+        int ind = 1;
+        for (Function<DefaultEdge, Double> weightFunction : weightFunctions) {
+            for (DefaultEdge e : G.edgeSet()) {
+                System.out.println("w" + ind + "(" + e + ") = " + weightFunction.apply(e));
+            }
+            System.out.println();
+            ind++;
+        }
+    }
+
+    /**
+     * Helper function for main. Used for generating a random directed graph
+     * @param n Number of vertices
+     * @param m Number of edges
+     * @return A random directed graph with Integers as vertices and DefaultEdges as edges with n vertices and m edges
+     */
+    private static DefaultDirectedGraph<Integer, DefaultEdge> generateRandomDirectedGraph(int n, int m) {
+        DefaultDirectedGraph<Integer, DefaultEdge> ret = new DefaultDirectedGraph<>(DefaultEdge.class);
+
+        //Adding vertices
+        for (int i = 1; i <= n; i++) {
+            ret.addVertex(i);
+        }
+
+        //Adding edges
+        Random random = new Random();
+        int to, from;
+        boolean added;
+        for (int i = 1; i <= m; i++) {
+            added = false;
+            while (!added) {
+                to = 0;
+                from = 0;
+                while (to == from) {
+                    to = random.nextInt(n) + 1;
+                    from = random.nextInt(n) + 1;
+                }
+                added = ret.addEdge(from, to) != null;
+            }
+        }
+
+        return ret;
+    }
+
+    /**
+     * Helper function for main. Used for generating a random connected directed graph
+     * @param n Number of vertices
+     * @param m Number of edges
+     * @return A random connected directed graph with Integers as vertices and DefaultEdges as edges with n vertices and m edges
+     */
+    private static DefaultDirectedGraph<Integer, DefaultEdge> generateRandomConnectedDirectedGraph(int n, int m, int s, int t) {
+        boolean connected = false;
+        DefaultDirectedGraph<Integer, DefaultEdge> ret = null;
+        while (!connected) {
+            ret = generateRandomDirectedGraph(n, m);
+            connected = isConnected(ret, s, t);
+        }
+        return ret;
+    }
+
+    /**
+     * Used to guarantee the preconditions for the input graph of the algorithm
+     * @param G A graph
+     * @param s Start node
+     * @param t End node
+     * @return Whether all nodes are reachable from s and all nodes reach t
+     */
+    private static boolean isConnected(Graph<Integer, DefaultEdge> G, int s, int t) {
+        DijkstraShortestPath<Integer, DefaultEdge> dijkstra = new DijkstraShortestPath<>(new AsWeightedGraph<>(G, e -> 1.0, false, false));
+        for (Integer v : G.vertexSet()) {
+            if (dijkstra.getPath(s, v) == null || dijkstra.getPath(v, t) == null) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Helper function for main. Used for generating q random weight functions
+     * @param G Graph the weight functions exist in
+     * @param q Number of weight functions to generate
+     * @param maxWeight Maximum weight for a single edge in any weight functions
+     * @param round Whether to round weight or not
+     * @return A list of q weight functions
+     * All weight functions are non-negative
+     */
+    private static List<Function<DefaultEdge, Double>> generateRandomWeightFunctions(Graph<Integer, DefaultEdge> G, int q, int maxWeight, boolean round) {
+        Random random = new Random();
+        List<Map<DefaultEdge, Double>> maps = new LinkedList<>();
+        for (int i = 0; i < q; i++) {
+            maps.add(new HashMap<>());
+        }
+        for (Map<DefaultEdge, Double> map : maps) {
+            for (DefaultEdge e : G.edgeSet()) {
+                map.put(e, round ? Math.floor(random.nextDouble() * maxWeight) : random.nextDouble() * maxWeight);
+            }
+        }
+        List<Function<DefaultEdge, Double>> weightFunctions = new LinkedList<>();
+        for (Map<DefaultEdge, Double> map : maps) {
+            weightFunctions.add(map::get);
+        }
+        return weightFunctions;
     }
 
     /**
@@ -25,16 +145,22 @@ public class kAllCriteriaShortestPaths<V, E> {
      * @param s Source Node
      * @param t Target Node
      * @param k Integer
-     * @return k Disjoint Paths
+     * @return k Disjoint Paths or null if none exist
      * We assume that G contains s and t,
      * that all vertices are reachable from s,
      * that t is reachable from all vertices,
      * and that there are no negative cycles in G w.r.t ant criterion
      */
-    public Set<GraphPath<V, E>> kAllCriteriaShortestPathsAlg(DefaultDirectedGraph<V, E> G, Function<E, Double>[] weightFunctions, V s, V t, int k) {
-        Function<E, Double> aggregatedWeight = e -> Arrays.stream(weightFunctions).map(f -> f.apply(e)).reduce(0.0, Double::sum); //The aggregated weight function, as defined in the paper
+    public Set<GraphPath<V, E>> kAllCriteriaShortestPathsAlg(DefaultDirectedGraph<V, E> G, List<Function<E, Double>> weightFunctions, V s, V t, int k) {
+        Function<E, Double> aggregatedWeight = e -> weightFunctions.stream().map(f -> f.apply(e)).reduce(0.0, Double::sum); //The aggregated weight function, as defined in the paper
         AsWeightedGraph<V, E> weightedGraph = new AsWeightedGraph<>(G, aggregatedWeight, false, false); //The graph after applying the aggregated function to its edges
-        return kSingleCriterionShortestPathsAlg(weightedGraph, s, t, k);
+        DijkstraShortestPath<V, E> dijkstra = new DijkstraShortestPath<>(weightedGraph);
+        double dst = dijkstra.getPath(s, t).getWeight(); //d(s,t)
+        double sumDists = 0.0;
+        for (Function<E, Double> weightFunction : weightFunctions) {
+            sumDists += new DijkstraShortestPath<>(new AsWeightedGraph<>(G, weightFunction, false, false)).getPath(s, t).getWeight();
+        }
+        return sumDists == dst ? kSingleCriterionShortestPathsAlg(weightedGraph, s, t, k) : null;
     }
 
     /**
@@ -43,7 +169,7 @@ public class kAllCriteriaShortestPaths<V, E> {
      * @param s Source Node
      * @param t Target Node
      * @param k Integer
-     * @return k Disjoint Paths
+     * @return k Disjoint Paths or null if none exist
      */
     private Set<GraphPath<V, E>> kSingleCriterionShortestPathsAlg(AsWeightedGraph<V, E> G, V s, V t, int k) {
         DijkstraShortestPath<V, E> dijkstra = new DijkstraShortestPath<>(G);
@@ -60,12 +186,11 @@ public class kAllCriteriaShortestPaths<V, E> {
      * @param s Source Node
      * @param t Target Node
      * @param k Integer
-     * @return k Disjoint Paths
+     * @return k Disjoint Paths or null if none exist
      */
     private Set<GraphPath<V, E>> kDisjointPathsAlg(AsSubgraph<V, E> G, V s, V t, int k) {
         AsWeightedGraph<V, E> weightedGraph = new AsWeightedGraph<>(G, e -> 1.0, false, false); //Flow network with unit capacities on all of its edges
         DinicMFImpl<V, E> dinic = new DinicMFImpl<>(weightedGraph);
-        dinic.dinic();
         if (dinic.getMaximumFlow(s, t).getValue() < k)
             return null;
         Map<E, Double> maxFlow = dinic.getFlowMap();
@@ -80,26 +205,26 @@ public class kAllCriteriaShortestPaths<V, E> {
             V v = t;
             marked.add(v);
             while (v != s) {
+                E edge = null;
+                Set<E> intersection = new HashSet<>(G.incomingEdgesOf(v));
+                intersection.retainAll(Ef);
+                for (E e: intersection) {
+                    edge = e;
+                    break;
+                }
+                S.push(edge);
+                v = G.getEdgeSource(edge);
                 if (marked.contains(v)) {
                     //Phase 2
                     V z = v;
                     do {
-                        E edge = S.pop();
-                        v = G.getEdgeSource(edge);
+                        E e = S.pop();
+                        v = G.getEdgeSource(e);
                         marked.remove(v);
-                        Ef.remove(edge);
+                        Ef.remove(e);
                     } while (v != z);
                     marked.add(v);
                 }
-                E edge = null;
-                for (E e : Ef) {
-                    if (G.getEdgeTarget(e) == v) {
-                        edge = e;
-                        break;
-                    }
-                }
-                S.push(edge);
-                v = G.getEdgeSource(edge);
                 marked.add(v);
             }
             //Phase 3
