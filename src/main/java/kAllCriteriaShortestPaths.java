@@ -16,16 +16,91 @@ import java.util.stream.Collectors;
 public class kAllCriteriaShortestPaths<V, E> {
 
     public static void main(String[] args) {
-        int n = 5;
+        //Examples on how to test the algorithm:
+        //testAlgWithRandomGraph(3, 6, 1, 3, 3, 2, true, 2);
+        //testAlgWithRandomGraphUntilSuccess(5, 15, 1, 3, 3, 2, true, 2);
+    }
 
-        DefaultDirectedGraph<Integer, DefaultEdge> G = generateRandomConnectedDirectedGraph(n, 10, 1, n);
+    /**
+     * Test the implemented algorithm over a random graph and weight functions
+     * @param n Number of nodes in the graph
+     * @param m Number of edges in the graph
+     * @param s Index of the starting node of the algorithm
+     * @param t Index of the ending node of the algorithm
+     * @param q Number of weight functions
+     * @param maxWeight Max weight of the weight functions
+     * @param round Whether or not to round the weights on each edge
+     * @param k The index given in the algorithm
+     */
+    private static void testAlgWithRandomGraph(int n, int m, int s, int t, int q, int maxWeight, boolean round, int k) {
+        if (s < 1 || s > n || t < 1 || t > n) {
+            System.out.println("Invalid start node and/or end node given");
+            return;
+        }
+
+        DefaultDirectedGraph<Integer, DefaultEdge> G = generateRandomConnectedDirectedGraph(n, m, s, t);
+        if (G == null) {
+            System.out.println("No such graph exists");
+            return;
+        }
         System.out.println("Input Graph: " + G);
 
         System.out.println("Weight Functions:");
-        List<Function<DefaultEdge, Double>> weightFunctions = generateRandomWeightFunctions(G, 3, 2, true);
+        List<Function<DefaultEdge, Double>> weightFunctions = generateRandomWeightFunctions(G, q, maxWeight, round);
         printWeightFunctions(weightFunctions, G);
 
-        System.out.println("Result: " + new kAllCriteriaShortestPaths<Integer, DefaultEdge>().kAllCriteriaShortestPathsAlg(G, weightFunctions, 1, n, 2));
+        Set<GraphPath<Integer, DefaultEdge>> res = new kAllCriteriaShortestPaths<Integer, DefaultEdge>().kAllCriteriaShortestPathsAlg(G, weightFunctions, s, t, k);
+        if (res == null) {
+            System.out.println("No solution exists");
+            return;
+        }
+        System.out.println("Result: " + res);
+    }
+
+    /**
+     * Randomly generate an input graph and weight functions until they yield a solution to the problem.
+     * Some inputs to this function will never yield a solution to the problem,
+     * so one should be cautious when calling this function, as it may cause an infinite loop
+     * @param n Number of nodes in the graph
+     * @param m Number of edges in the graph
+     * @param s Index of the starting node of the algorithm
+     * @param t Index of the ending node of the algorithm
+     * @param q Number of weight functions
+     * @param maxWeight Max weight of the weight functions
+     * @param round Whether or not to round the weights on each edge
+     * @param k The index given in the algorithm
+     */
+    private static void testAlgWithRandomGraphUntilSuccess(int n, int m, int s, int t, int q, int maxWeight, boolean round, int k) {
+        if (s < 1 || s > n || t < 1 || t > n) {
+            System.out.println("Invalid start node and/or end node given");
+            return;
+        }
+
+        int attempt = 0;
+        kAllCriteriaShortestPaths<Integer, DefaultEdge> alg = new kAllCriteriaShortestPaths<>();
+        DefaultDirectedGraph<Integer, DefaultEdge> G = generateRandomConnectedDirectedGraph(n, m, s, t);
+        if (G == null) { //Making sure a valid graph can be created for the given n and m
+            System.out.println("No such graph exists");
+            return;
+        }
+        List<Function<DefaultEdge, Double>> weightFunctions;
+        Set<GraphPath<Integer, DefaultEdge>> res = null;
+
+        while (res == null) {
+            attempt++;
+            System.out.println("Attempt " + attempt);
+
+            G = generateRandomConnectedDirectedGraph(n, m, s, t);
+            System.out.println("Input Graph: " + G);
+
+            System.out.println("Weight Functions:");
+            weightFunctions = generateRandomWeightFunctions(G, q, maxWeight, round);
+            printWeightFunctions(weightFunctions, G);
+
+            res = alg.kAllCriteriaShortestPathsAlg(G, weightFunctions, s, t, k);
+        }
+
+        System.out.println("Result: " + res);
     }
 
     /**
@@ -51,6 +126,10 @@ public class kAllCriteriaShortestPaths<V, E> {
      * @return A random directed graph with Integers as vertices and DefaultEdges as edges with n vertices and m edges
      */
     private static DefaultDirectedGraph<Integer, DefaultEdge> generateRandomDirectedGraph(int n, int m) {
+        if (n < 1 || m < n || m > n * (n - 1)) {
+            return null;
+        }
+
         DefaultDirectedGraph<Integer, DefaultEdge> ret = new DefaultDirectedGraph<>(DefaultEdge.class);
 
         //Adding vertices
@@ -89,6 +168,9 @@ public class kAllCriteriaShortestPaths<V, E> {
         DefaultDirectedGraph<Integer, DefaultEdge> ret = null;
         while (!connected) {
             ret = generateRandomDirectedGraph(n, m);
+            if (ret == null) {
+                return null;
+            }
             connected = isConnected(ret, s, t);
         }
         return ret;
@@ -191,20 +273,22 @@ public class kAllCriteriaShortestPaths<V, E> {
     private Set<GraphPath<V, E>> kDisjointPathsAlg(AsSubgraph<V, E> G, V s, V t, int k) {
         AsWeightedGraph<V, E> weightedGraph = new AsWeightedGraph<>(G, e -> 1.0, false, false); //Flow network with unit capacities on all of its edges
         DinicMFImpl<V, E> dinic = new DinicMFImpl<>(weightedGraph);
-        if (dinic.getMaximumFlow(s, t).getValue() < k)
+        if (dinic.getMaximumFlow(s, t).getValue() < k) {
             return null;
+        }
         Map<E, Double> maxFlow = dinic.getFlowMap();
         Set<E> Ef = G.edgeSet().stream().filter(e -> maxFlow.get(e) == 1).collect(Collectors.toSet()); //Set of all edges with a flow of 1
         Set<GraphPath<V, E>> P = new HashSet<>(); //returned set of k paths
         Stack<E> S = new Stack<>(); //Stack used in the path finding routine
-        Set<V> marked = new HashSet<>(); //Set of all marked edges
+        Set<V> marked = new HashSet<>(); //Set of all marked vertices
         for (int i = 0; i < k; i++) {
             //Phase 1
-            while (!S.empty())
+            while (!S.empty()) {
                 S.pop(); //Empty the stack
+            }
             V v = t;
             marked.add(v);
-            while (v != s) {
+            while (!v.equals(s)) {
                 E edge = null;
                 Set<E> intersection = new HashSet<>(G.incomingEdgesOf(v));
                 intersection.retainAll(Ef);
@@ -222,14 +306,14 @@ public class kAllCriteriaShortestPaths<V, E> {
                         v = G.getEdgeSource(e);
                         marked.remove(v);
                         Ef.remove(e);
-                    } while (v != z);
+                    } while (!v.equals(z));
                     marked.add(v);
                 }
                 marked.add(v);
             }
             //Phase 3
             List<E> edgeList = new LinkedList<>(); //List of edges of the path to be added to P
-            while (v != t) {
+            while (!v.equals(t)) {
                 marked.remove(v);
                 E edge = S.pop();
                 v = G.getEdgeTarget(edge);
