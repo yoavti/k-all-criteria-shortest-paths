@@ -14,11 +14,38 @@ import java.util.stream.Collectors;
  * @param <E> Type of edges
  */
 public class kAllCriteriaShortestPaths<V, E> {
+    private static final Scanner scanner = new Scanner(System.in);
 
     public static void main(String[] args) {
-        //Examples on how to test the algorithm:
-        //testAlgWithRandomGraph(3, 6, 1, 3, 3, 2, true, 2);
-        //testAlgWithRandomGraphUntilSuccess(5, 15, 1, 3, 3, 2, true, 2);
+        System.out.println("Do you want the testing algorithm to run once or should it generate graphs until it succeeds?");
+        System.out.println("WARNING: the second option could produce an infinite loop");
+        System.out.println("If you want the first option please input 0. Otherwise input 1");
+        boolean once = scanner.nextLine().equals("0");
+        int n = getNumber("n (number of nodes in the random graph)"), m = getNumber("m (number of edges in the random graph)"), s = getNumber("s (the index, from 1 to n, of the starting node of the algorithm)"), t = getNumber("t (the index, from 1 to n, of the ending node of the algorithm)"), q = getNumber("q (number of weight functions)"), maxWeight = getNumber("the maximum weight for the weight functions"), k = getNumber("k (number of disjoint paths of the output)");
+        System.out.println("Do you want the weights of the weight function to be integers or floats?");
+        System.out.println("If you want them to be integers, please input i. Otherwise input f");
+        boolean round = scanner.nextLine().equals("i");
+        if (once) {
+            testAlgWithRandomGraph(n, m, s, t, q, maxWeight, round, k);
+        }
+        else {
+            testAlgWithRandomGraphUntilSuccess(n, m, s, t, q, maxWeight, round, k);
+        }
+    }
+
+    /**
+     * Gets a number as input from the console
+     * @param name The name of the parameter received from the user
+     * @return The integer value of the parameter received from the user
+     */
+    private static int getNumber(String name) {
+        try {
+            System.out.println("Please input " + name);
+            return Integer.parseInt(scanner.nextLine());
+        } catch (Error e) {
+            System.out.println("Invalid input");
+            return 0;
+        }
     }
 
     /**
